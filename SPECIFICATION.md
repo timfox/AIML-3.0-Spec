@@ -10,7 +10,7 @@
 
 This file is a **working draft specification** intended for implementation, review, and interoperability testing. It includes an abstract, status section, numbered clauses, RFC 2119 / RFC 8174 keyword usage, and appendices.
 
-**Audience:** This specification is intended for developers, engineers, and technical stakeholders building or maintaining AIML interpreters, validators, authoring environments, systems for content interchange, and cached agentic solutions. It is also relevant to game developers, integration architects, and platform designers who seek to enable interoperable conversational AI—including within gamified environments.
+**Audience:** This specification is intended for developers, engineers, and technical stakeholders building or maintaining AIML interpreters, validators, authoring environments, systems for content interchange, and cached agentic solutions. It is also relevant to game developers, integration architects, and platform designers who seek to enable interoperable conversational AI including gamified environments.
 
 ### AIML 3.0 Integration Profile Overview
 
