@@ -45,8 +45,9 @@ If you are new to the spec, start with:
 3. Syntax and Document Infoset
 4. Processing Model
 5. Pattern Language and Template Language
-6. the optional modules in Section 9
+6. the optional modules in Section 9 (including §9.16 agent tools and §9.17 test-time search)
 7. the worked examples and profile matrix
+8. **Appendix I** — Bidirectional Evolutionary Search (BES, arXiv:2605.28814) GOPEX integration profile
 
 ## File
 

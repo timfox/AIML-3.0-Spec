@@ -56,6 +56,7 @@ AIML (Artificial Intelligence Markup Language) is a **declarative dialog rule la
 - [Appendix F: Worked Examples](#appendix-f-worked-examples)
 - [Appendix G: Multi-User Dungeon Verb Families](#appendix-g-multi-user-dungeon-verb-families)
 - [Appendix H: Choice and Link Semantics](#appendix-h-choice-and-link-semantics)
+- [Appendix I: Bidirectional Evolutionary Search (BES)](#appendix-i-bidirectional-evolutionary-search-bes)
 
 ---
 
@@ -166,6 +167,8 @@ Implementations MAY additionally claim one or more **profiles** that compose con
 | **Full World/Scene** | Dialog + Directives + §9.4 World State and Effects Module + §9.5 Multi-party Conversation Module + §9.6 Presentation Envelope Module + §9.10 Narrative Graph Module + support for at least one rich serialization, RECOMMENDED: XML, JSON, and USD. |
 | **Simulation / Planner** | Core Dialog + any of §9.13, §9.14, or §9.15; §9.4 is RECOMMENDED. |
 | **Proofing / Analysis** | `AIML3-Validator` plus §9.12 Proofing and Analysis Module; §9.10 Narrative Graph Module is RECOMMENDED. |
+| **Agent Tools (GOPEX)** | Core Dialog + §9.16 Agent Tool Bridge Module; host MUST attach a validated tool broker. |
+| **Test-Time Search (BES)** | Agent Tools profile + §9.17 Test-Time Search Module; RECOMMENDED: §9.7 LLM Mediation and §9.15 Planning for goal decomposition. |
 
 ---
 
@@ -1002,6 +1005,72 @@ AIML MAY emit advisory hints such as preferred venue class, meeting firmness, ta
 - enqueue a proposal for later validation  
 - or have no runtime effect outside proofing
 
+### 9.16 Agent tool bridge module
+
+This module standardizes a **host-mediated tool invocation** surface for AIML agents that delegate work to registered host capabilities (local CLIs, evaluation harnesses, retrieval, or training planners). It is used in production by the **GOPEX** host profile documented in [Appendix I](#appendix-i-bidirectional-evolutionary-search-bes) and companion implementations.
+
+#### 9.16.1 `<agent_tool/>` element
+
+In XML serialization, templates MAY emit:
+
+```xml
+<agent_tool action="call_tool" tool="bes_eval_demo" reason="BES CPU evaluation demo"/>
+```
+
+| Attribute | REQUIRED | Meaning |
+|-----------|----------|---------|
+| `action` | YES | Host action name. `call_tool` invokes a named tool; `set_topic`, `set_flag`, and `noop` are host-defined control actions. |
+| `tool` or `name` | For `call_tool` | Registry name of the tool to invoke. |
+| `args_json` | NO | JSON object string of tool arguments; MUST parse as a JSON object if present. |
+| `reason` | RECOMMENDED | Short audit string for logs and proofing. |
+
+Equivalent JSON template records SHOULD use a structured object, for example:
+
+```json
+{
+  "agent_tool": {
+    "action": "call_tool",
+    "tool": "bes_toy_search",
+    "args_json": { "seed": 42 },
+    "reason": "BES toy bidirectional search"
+  }
+}
+```
+
+#### 9.16.2 Execution rules
+
+If this module is supported:
+
+- Tool invocation MUST occur only when the host has attached a **tool broker** with an allowlisted registry.  
+- Unknown tools MUST fail closed with a host-defined error surface; AIML MUST NOT imply success unless the host commits a tool result.  
+- Tool calls MUST respect the transaction semantics in §5.8; side effects from tools follow the host’s documented scope (session, workspace, or external API).  
+- Hosts SHOULD cap concurrent tool calls, payload size, and wall-clock time per turn.  
+- Proofing profiles SHOULD be able to lint `tool` names against a declared registry when static metadata is available.
+
+### 9.17 Test-time search module
+
+Implementations MAY integrate AIML with **test-time compute** pipelines that search for high-quality trajectories or programs under a verifier \(V(x, y) \in [0, 1]\). This module is **informative** for hosts adopting **Bidirectional Evolutionary Search (BES)** (Appendix I) but does not require BES specifically.
+
+If this module is supported:
+
+- Search MUST run under a documented **compute budget** (policy calls, API spend, or wall-clock).  
+- The host MUST expose **backward sub-goal scores** or terminal verifier scores to parent selection; sparse terminal-only signals alone are insufficient for full BES profiles.  
+- Partial trajectories (reasoning segments, agent action triples, or program candidates) MUST be addressable as **nodes** in a search pool.  
+- Hosts MAY implement **evolution operators** (combination, deletion, translocation, crossover) in addition to autoregressive **expansion**.  
+- When candidates are not literal token concatenations (for example executable programs), evolution operators MAY be realized by **prompted rewrites** under the same operator semantics.  
+- AIML categories MAY trigger search or report search outcomes via §9.16 tools; AIML MUST NOT claim a problem is solved unless the host verifier returns success.
+
+#### 9.17.1 RECOMMENDED host predicates
+
+| Predicate | Meaning |
+|-----------|---------|
+| `search_budget_remaining` | Stringified count of remaining policy or API calls in the active search episode. |
+| `backward_score` | Stringified \([0,1]\) score from backward goal-tree aggregation (Eq. I-5 in Appendix I). |
+| `terminal_verifier_score` | Stringified terminal \(V(x, n)\) for the best pool member. |
+| `search_operator` | Name of the last forward operator applied (`expand`, `combine`, `delete`, `translocate`, `crossover`). |
+
+Hosts SHOULD document annealing schedules for parent-selection temperature when Boltzmann selection is used.
+
 ---
 
 ## 10. Predicates, Maps, and Bot Properties
@@ -1300,6 +1369,8 @@ The following names are standardized by this draft at the infoset level. They MA
 | narrative node fields (`id`, `name`, `tags`, `metadata`, `body`, `links`) | §4.9, §9.10 |
 | link fields (`label`, `target`, `conditions`, `effects`, `directives`, `metadata`) | §4.9, §9.10, Appendix H |
 | special resources (`global_script`, `global_stylesheet`, `init_data`, `proofing_data`) | §4.10, §9.11 |
+| `agent_tool` (`action`, `tool`, `name`, `args_json`, `reason`) | §9.16 |
+| test-time search predicates (`search_budget_remaining`, `backward_score`, `terminal_verifier_score`, `search_operator`) | §9.17 |
 
 ---
 
@@ -1311,6 +1382,7 @@ The following names are standardized by this draft at the infoset level. They MA
 - **Namespaces in XML 1.0**  
 - **OpenUSD / Universal Scene Description**  
 - Historical AIML 2.x community specifications and schemas (for comparative reading only)
+- **BES:** Xu, Qi, Su, Ye, Lakkaraju, Kakade, Du — *Self-Improving Language Models with Bidirectional Evolutionary Search*, arXiv:2605.28814 (2026); code: [Embodied-Minds-Lab/BES](https://github.com/Embodied-Minds-Lab/BES)
 
 ---
 
@@ -1344,6 +1416,8 @@ This appendix is **informative**.
 | **Full World/Scene** | A general interaction layer for multi-user or scene-rich simulations. | §9.3, §9.4, §9.5, §9.6, §9.10, optionally §9.7 and USD serialization. |
 | **Simulation / Planner** | AIML grounded in ECS state, event streams, or planner context. | §9.13, §9.14, §9.15, RECOMMENDED: §9.4 and §9.5. |
 | **Proofing / Analysis** | Non-playable review, lint, and export workflow. | §9.12, RECOMMENDED: §9.10 and §9.11. |
+| **Agent Tools (GOPEX)** | Dialog triggers host-registered tools (`agent_tool`). | §9.16; tool broker required. |
+| **Test-Time Search (BES)** | Bidirectional evolutionary search for training / inference. | §9.16, §9.17, Appendix I. |
 
 ---
 
@@ -1606,6 +1680,27 @@ This appendix is **informative**.
 }
 ```
 
+### F.12 BES agent tool invocation (GOPEX)
+
+```xml
+<aiml version="3.0">
+  <topic name="bes">
+    <category id="bes_demo">
+      <pattern>BES DEMO</pattern>
+      <template>
+        <agent_tool action="call_tool" tool="bes_eval_demo" reason="BES CPU evaluation demo"/>
+      </template>
+    </category>
+    <category id="bes_toy">
+      <pattern>BES TOY SEARCH</pattern>
+      <template>
+        <agent_tool action="call_tool" tool="bes_toy_search" args_json="{&quot;seed&quot;: 42}" reason="BES toy bidirectional search"/>
+      </template>
+    </category>
+  </topic>
+</aiml>
+```
+
 ---
 
 ## Appendix G: Multi-User Dungeon Verb Families
@@ -1661,6 +1756,165 @@ Recommended proofing checks:
 - link is permanently hidden by contradictory conditions  
 - node has no visible outgoing links and no terminal marker  
 - multiple links share the same label but diverge invisibly in behavior
+
+---
+
+## Appendix I: Bidirectional Evolutionary Search (BES)
+
+This appendix is **informative**. It documents how **Bidirectional Evolutionary Search (BES)** (Xu et al., arXiv:2605.28814) maps onto AIML 3.0 host profiles, §9.16–§9.17, and the GOPEX reference implementation. BES is a **search framework**, not a replacement for Core Dialog matching; authored AIML categories **trigger** or **explain** search episodes executed by the host.
+
+### I.1 Bibliography
+
+| Field | Value |
+|-------|-------|
+| Title | Self-Improving Language Models with Bidirectional Evolutionary Search |
+| arXiv | [2605.28814](https://arxiv.org/abs/2605.28814) |
+| Authors | Guowei Xu, Zhenting Qi, Huangyuan Su, Weirui Ye, Himabindu Lakkaraju, Sham M. Kakade, Yilun Du (Harvard; MIT) |
+| Code | [github.com/Embodied-Minds-Lab/BES](https://github.com/Embodied-Minds-Lab/BES) |
+
+### I.2 Problem statement
+
+A reasoning task is \(T = (x, V)\) where \(x\) is a problem description and \(V(x, y) \in [0, 1]\) scores trajectory \(y\). A policy \(\pi_\theta(\cdot \mid x)\) generates trajectories. The target is \(y^\star(x) \in \arg\max_{y \in \mathcal{Y}_{\mathrm{term}}(x)} V(x, y)\). BES approximates \(y^\star\) by maintaining a **pool** \(P\) of partial trajectories and alternating:
+
+1. **Forward search** — expand or **evolve** candidates.  
+2. **Backward search** — decompose goals into verifiable **sub-goals** and score every pool member densely.
+
+### I.3 Limitations addressed (vs best-of-N and tree search)
+
+| Limitation | BES response |
+|------------|----------------|
+| Sparse terminal verification | Backward **goal tree** with recursive sub-goal verifiers \(V_g(x, n)\) |
+| Candidates confined to policy entropy shell | **Evolution operators** recombine steps across lineages (Theorem 4.4) |
+| Sample complexity on hard tasks | Sub-goal collection reduces required samples exponentially vs terminal-only (Theorem 4.5) |
+
+### I.4 Forward search
+
+Each candidate is a node \(n = (y_1, \ldots, y_t)\) (reasoning segment, agent action triple, or program body depending on host).
+
+**Expansion.** Sample \(K \sim \mathrm{Uniform}\{1,\ldots,K_{\max}\}\) and draw \(y_{t+k} \sim \pi_\theta(\cdot \mid x \oplus y_{1:t+k-1})\).
+
+**Evolution operators** (default mixture in GOPEX reference):
+
+| Operator | Probability | Effect |
+|----------|-------------|--------|
+| `expand` | 0.70 | Autoregressive continuation |
+| `combine` | 0.10 | Concatenate suffixes after longest shared prefix |
+| `delete` | 0.05 | Remove one interior step |
+| `translocate` | 0.075 | Replace one step with a step from another parent |
+| `crossover` | 0.075 | Splice prefix of A with tail of B |
+
+**Parent selection (single-parent).** Boltzmann over backward score \(s(n)\) with temperature \(\tau_t\) annealed from \(\tau_0\) to \(\tau_{\mathrm{end}}\):
+
+\[
+\Pr[n \mid C_t] = \frac{\exp(\tilde{s}(n)/\tau_t)}{\sum_{n' \in C_t} \exp(\tilde{s}(n')/\tau_t)}, \quad \tilde{s}(n) = s(n) + \lambda \cdot \mathbf{1}[\deg(n)=0]
+\]
+
+with \(\lambda = 0.1\) in the paper’s MuSiQue / K&K setups (bonus for unexplored nodes).
+
+**Pair selection (two-parent).** Boltzmann over pair score \(s(n_a, n_b)\) favoring complementary sub-goal coverage.
+
+### I.5 Backward search and scoring
+
+Starting from root goal \(g_{\mathrm{root}}\) (terminal verifier \(V\)), the policy decomposes goals into children \(\mathrm{ch}(g)\), each with verifier \(V_g\). Every \(K_{\mathrm{dec}}\) forward steps, an unsatisfied leaf is split further.
+
+**Sub-goal score** (paper Eq. 5; denoted Eq. I-5 here):
+
+\[
+s(n, g) = \alpha \cdot V_g(x, n) + (1-\alpha) \cdot \frac{1}{|\mathrm{ch}(g)|} \sum_{g' \in \mathrm{ch}(g)} s(n, g')
+\]
+
+Leaf goals use \(s(n,g) = V_g(x,n)\). If \(V_g(x,n)=1\), short-circuit to \(1\). Overall node score: \(s(n) \triangleq s(n, g_{\mathrm{root}})\).
+
+**Pair score** (paper Eq. 6):
+
+\[
+s(n_a, n_b, g) = \alpha \cdot \max\{V_g(x,n_a), V_g(x,n_b)\} + (1-\alpha) \cdot \frac{1}{|\mathrm{ch}(g)|} \sum_{g'} s(n_a, n_b, g')
+\]
+
+### I.6 Main loop (Algorithm 1)
+
+```
+BES(x, πθ, V, budget B, decompose interval Kdec):
+  Initialize goal tree G from groot; pool P ← { empty root }
+  for t = 0, 1, … while calls(t) < B:
+    n′ ← FORWARDSTEP(P, eligible set, G, τt)
+    s(n′) ← BACKWARDSCORE(n′, groot, G)
+    P ← P ∪ {n′}
+    if (t+1) mod Kdec = 0:
+      G ← BACKWARDDECOMPOSE(x, G, P); re-score all n ∈ P
+    if n′ terminal and V(x,n′)=1: return n′
+  return argmax_{n terminal} V(x,n)
+```
+
+Pseudocode for `FORWARDSTEP`, `BACKWARDSCORE`, and `BACKWARDDECOMPOSE` matches the paper’s Appendix A (Algorithms 2–4).
+
+### I.7 Theory (informative summary)
+
+**Theorem 4.4 (shell confinement and escape).** Under bounded per-step surprise, decaying step dependence, and linear block total correlation, expansion-only rollouts lie in a typical set of size \(\approx \exp(H_T + \epsilon T)\), while \(k\)-way block evolution yields expected log-probability \(\geq H_T + \gamma T\) for \(\gamma > 0\), placing a positive fraction of candidates outside the shell.
+
+**Theorem 4.5 (backward advantage).** If sub-goals are independent with success probabilities \(p_i\), terminal-only search needs \(N_{\mathrm{term}} = \Omega(1/\prod_i p_i)\) samples for constant success probability, whereas backward-guided collection needs \(N_{\mathrm{bidir}} = O(p_{\min}^{-1} \log(m/\delta))\) to cover all \(m\) sub-goals — exponential separation when \(p_i = p\) and \(m\) is large.
+
+### I.8 Experiment anchors (paper Tables 1–4)
+
+**MuSiQue post-training (Table 1, accuracy %):**
+
+| Backbone | Base | +GRPO | +Tree-GRPO | +BES |
+|----------|------|-------|------------|------|
+| Llama-3.2-3B-Instruct | 4.0 | 2.1 | 3.9 | **7.0** |
+| Llama-3.1-8B-Instruct | 6.6 | 5.6 | 7.4 | **10.4** |
+
+**Open problem solving with GPT-5 (Table 2, mean / best objective ↑):**
+
+| Benchmark | ShinkaEvolve | BES |
+|-----------|--------------|-----|
+| Circle packing (square) | 2.464 / 2.541 | **2.623 / 2.632** |
+| Circle packing (rect) | 2.335 / 2.358 | **2.349 / 2.360** |
+| Heilbronn (convex) | 0.023 / 0.026 | **0.026 / 0.027** |
+
+**Cost (Tables 3–4):** BES adds &lt;30% wall-clock vs Tree-GRPO on MuSiQue 3B while improving accuracy; open-problem API cost is modestly higher than ShinkaEvolve with better mean scores and lower variance.
+
+**Logical reasoning (Figure 3):** On Knights-and-Knaves, BES improves validation log-accuracy where GRPO and MaxRL plateau.
+
+### I.9 AIML 3.0 integration (GOPEX)
+
+| Artifact | Location |
+|----------|----------|
+| AIML topic `bes` | `gopex_agent/fixtures/bes.aiml` |
+| Implementation | `ltx_trainer.bes` (GOPEX: `kino/packages/ltx-trainer/src/ltx_trainer/bes/`) |
+| Agent tools | `bes_framework_card`, `bes_eval_demo`, `bes_benchmarks`, `bes_toy_search`, `bes_theory`, `bes_ltx_plan`, `bes_run_plan` |
+| CLI | `./scripts/gopex-bes.sh` (`smoke`, `toy`, `ltx`, `plan`) |
+| Doc | `documents/BES.md` in GOPEX monorepo |
+
+**RECOMMENDED patterns:**
+
+| User pattern | Tool / behavior |
+|--------------|-----------------|
+| `WHAT IS BES` | Surface help text (category `bes_help`) |
+| `BES DEMO` | `bes_eval_demo` |
+| `BES TOY SEARCH` | `bes_toy_search` |
+| `BES LTX PLAN` | `bes_ltx_plan` |
+
+**RECOMMENDED host environment (sample generation, not interpreted by Core AIML):**
+
+```bash
+export GOPEX_AGENT_SEARCH=bes
+export GOPEX_BES_BUDGET=200
+export GOPEX_BES_DECOMPOSE_EVERY=10
+export GOPEX_BES_ALPHA=0.3
+```
+
+### I.10 Relation to other AIML 3.0 modules
+
+| Module | Relation |
+|--------|----------|
+| §9.7 LLM Mediation | Policy \(\pi_\theta\) may be an LLM; backward decomposition prompts use the same model. |
+| §9.15 Planning | Backward goal tree is analogous to hierarchical plans; BES scores partial plan satisfaction. |
+| §9.12 Proofing | Search traces and goal trees SHOULD be exportable as proofing diagnostics. |
+| §9.4 World State | Sub-goal satisfaction MAY map to `requires` / `set_flag` when hosts materialize search state in session predicates. |
+
+### I.11 Conformance token (informative)
+
+Implementations claiming **Test-Time Search (BES)** profile SHOULD support §9.16, §9.17, at least one BES tool in the host registry, and documented budgets for `search_budget_remaining`. Full paper replication (Gemma K&K training, MuSiQue agents, ShinkaEvolve+GPT-5 open problems) is **out of scope** for AIML conformance and remains host-specific.
 
 ---
 
